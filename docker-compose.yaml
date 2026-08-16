@@ -23,7 +23,7 @@ services:
       - "8082:8080"
 
   ws4kp-stream:
-    image: ws4kp-stream:local
+    image: ghcr.io/snachodog/ws4kp-stream:latest
     container_name: ws4kp-stream
     restart: unless-stopped
     shm_size: "1gb"

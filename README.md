@@ -75,16 +75,9 @@ values (location, stream key) stay out of anything checked into version control.
 
 ### Image availability
 
-`ws4kp-stream` is currently a **locally-built image** (`ws4kp-stream:local`), not published to a
-registry — `docker build .` on whichever host is running it, before deploying the stack there.
-Deploying the same compose file on a *different* host (e.g. a separate server) will fail with a
-"pull access denied" error unless that host also has the image built locally, since Docker has
-nothing to pull for an image tag that only exists on one machine.
-
-To make this portable across hosts, publish it to GHCR (matching how `ws4kp-server` is built) —
-either push it manually (`docker tag ws4kp-stream:local ghcr.io/snachodog/ws4kp-stream:latest &&
-docker push ...`) or set this repo up with a GitHub Actions workflow like `ws4kp`'s
-`build-docker-server.yaml`, then point `image:` at the GHCR tag instead of `:local`.
+Published to `ghcr.io/snachodog/ws4kp-stream:latest` via `.github/workflows/build-docker.yaml` on
+every push to `main` (mirrors `ws4kp`'s own `build-docker-server.yaml`) — `docker-compose.yaml`
+pulls this directly, so the same compose file works on any host without a local build first.
 
 ## Testing without a real stream destination
 
