@@ -1,0 +1,43 @@
+services:
+  ws4kp:
+    image: ghcr.io/snachodog/ws4kp-server:latest
+    container_name: ws4kp
+    restart: unless-stopped
+    environment:
+      - WSQS_latLonQuery=${WSQS_latLonQuery}
+      - WSQS_kiosk=${WSQS_kiosk}
+      - WSQS_mediaPlaying=${WSQS_mediaPlaying}
+      - WSQS_hazards=${WSQS_hazards}
+      - WSQS_current_weather=${WSQS_current_weather}
+      - WSQS_latest_observations=${WSQS_latest_observations}
+      - WSQS_hourly=${WSQS_hourly}
+      - WSQS_hourly_graph=${WSQS_hourly_graph}
+      - WSQS_travel=${WSQS_travel}
+      - WSQS_regional_forecast=${WSQS_regional_forecast}
+      - WSQS_local_forecast=${WSQS_local_forecast}
+      - WSQS_extended_forecast=${WSQS_extended_forecast}
+      - WSQS_almanac=${WSQS_almanac}
+      - WSQS_spc_outlook=${WSQS_spc_outlook}
+      - WSQS_radar=${WSQS_radar}
+    ports:
+      - "8082:8080"
+
+  ws4kp-stream:
+    image: ws4kp-stream:local
+    container_name: ws4kp-stream
+    restart: unless-stopped
+    shm_size: "1gb"
+    depends_on:
+      - ws4kp
+    environment:
+      - STREAM_URL=${STREAM_URL}
+      - RESOLUTION=${RESOLUTION}
+      - FRAMERATE=${FRAMERATE}
+      - BITRATE=${BITRATE}
+      - BUFSIZE=${BUFSIZE}
+      # falls back to writing an HLS preview to /output/stream.m3u8 when
+      # RTMP_URL is empty (e.g. rtmp://a.rtmp.youtube.com/live2/<key> once
+      # you have somewhere to actually send it)
+      - RTMP_URL=${RTMP_URL}
+    volumes:
+      - /home/steve/wx-stream/output:/output
