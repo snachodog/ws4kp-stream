@@ -15,6 +15,23 @@ VHEIGHT=$((HEIGHT + PAD))
 PARK_X=$((WIDTH + PAD / 2))
 PARK_Y=$((HEIGHT + PAD / 2))
 
+# Clean up stale lock/socket files left behind by an unclean exit of a
+# previous run (e.g. a Chromium/ffmpeg crash, OOM kill - `set -euo pipefail`
+# means any of those tears down this whole script). Docker's restart policy
+# then relaunches entrypoint.sh into the same container filesystem, where
+# these files are still on disk even though nothing is listening on them
+# anymore. Left in place, Xvfb/PulseAudio/Chromium each refuse to (re)start
+# and the container restart-loops forever with no way to recover on its own.
+DISPLAY_NUM="${DISPLAY#:}"
+rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
+# PulseAudio's real daemon state (pid file, native socket) lives under a
+# machine-id-keyed runtime dir it re-derives from ~/.config/pulse on every
+# start, not just the custom socket= path we pass below - a stale pid file
+# there makes it think a daemon is already running and refuse to start.
+rm -f /tmp/pulseaudio.socket
+rm -rf /root/.config/pulse /tmp/pulse-*
+rm -f /tmp/chromium-profile/Singleton*
+
 echo "[stream] Starting virtual display ${DISPLAY} at ${VWIDTH}x${VHEIGHT} (capturing ${RESOLUTION} from 0,0)"
 Xvfb "$DISPLAY" -screen 0 "${VWIDTH}x${VHEIGHT}x24" -nolisten tcp &
 sleep 2
