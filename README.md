@@ -14,12 +14,13 @@ Portainer stack.
 2. **fluxbox** — a minimal window manager. Without one, Chromium never receives real X11
    focus/visibility state and throttles its own timers and animations as if it were a backgrounded
    tab — the app gets partway through startup and then just stalls forever. fluxbox gives it a real
-   (invisible) focused window.
+   (invisible) focused window. An `~/.fluxbox/apps` rule also forces Chromium's window undecorated
+   and pinned to exactly `(0,0)` at the capture resolution (see "Chromium launch mode" below).
 3. **PulseAudio** — a null-sink audio server. Chromium has no audio device at all without a running
    audio server (visible as ALSA "no such file or directory" errors otherwise), so its output would
    just be dropped. A null sink gives it somewhere to play audio *to*, which ffmpeg then reads back
    from that sink's `.monitor`.
-4. **Chromium**, launched `--kiosk` and pointed at `STREAM_URL`.
+4. **Chromium**, launched in `--app` mode and pointed at `STREAM_URL`.
 5. **ffmpeg** captures the X11 display (`x11grab`) and PulseAudio monitor, encodes H.264/AAC, and
    either pushes it to `RTMP_URL` or writes a local HLS preview.
 
@@ -31,6 +32,19 @@ this) was tried first and didn't actually work here. Instead, the virtual displa
 larger than the capture resolution in each dimension, and `xdotool` parks the cursor in that padding
 — outside the rectangle ffmpeg actually grabs. It's then physically impossible for the cursor to
 appear in the stream, regardless of any cursor-hiding heuristics.
+
+### Chromium launch mode
+
+Chromium runs in `--app=<url>` mode rather than `--kiosk`. `--kiosk` requests real EWMH fullscreen,
+and window managers honor that by resizing the window to the *entire* X11 screen — overriding
+`--window-size`/`--window-position` outright. Since the virtual screen is deliberately padded larger
+than the capture resolution (for the cursor-parking trick above), that silently pushed the
+bottom/right of the actual page content past the edge of what ffmpeg captures, cropping it off.
+`--app` opens a chromeless window instead of requesting fullscreen, so it actually respects the
+requested position and size. It still needs an explicit `~/.fluxbox/apps` rule to strip fluxbox's
+default title bar (fluxbox decorates plain windows, but not fullscreen ones) — otherwise the
+decoration reintroduces the same kind of offset in miniature. `--test-type` suppresses the
+Chromium "unsupported command-line flag" infobar that `--no-sandbox` normally triggers.
 
 ### Audio requirement
 

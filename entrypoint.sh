@@ -15,6 +15,23 @@ VHEIGHT=$((HEIGHT + PAD))
 PARK_X=$((WIDTH + PAD / 2))
 PARK_Y=$((HEIGHT + PAD / 2))
 
+# Clean up stale lock/socket files left behind by an unclean exit of a
+# previous run (e.g. a Chromium/ffmpeg crash, OOM kill - `set -euo pipefail`
+# means any of those tears down this whole script). Docker's restart policy
+# then relaunches entrypoint.sh into the same container filesystem, where
+# these files are still on disk even though nothing is listening on them
+# anymore. Left in place, Xvfb/PulseAudio/Chromium each refuse to (re)start
+# and the container restart-loops forever with no way to recover on its own.
+DISPLAY_NUM="${DISPLAY#:}"
+rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
+# PulseAudio's real daemon state (pid file, native socket) lives under a
+# machine-id-keyed runtime dir it re-derives from ~/.config/pulse on every
+# start, not just the custom socket= path we pass below - a stale pid file
+# there makes it think a daemon is already running and refuse to start.
+rm -f /tmp/pulseaudio.socket
+rm -rf /root/.config/pulse /tmp/pulse-*
+rm -f /tmp/chromium-profile/Singleton*
+
 echo "[stream] Starting virtual display ${DISPLAY} at ${VWIDTH}x${VHEIGHT} (capturing ${RESOLUTION} from 0,0)"
 Xvfb "$DISPLAY" -screen 0 "${VWIDTH}x${VHEIGHT}x24" -nolisten tcp &
 sleep 2
@@ -26,6 +43,21 @@ xdotool mousemove "$PARK_X" "$PARK_Y"
 # treats the page as backgrounded, throttling its timers/animations - the app
 # gets partway through startup and then just stalls. fluxbox gives it a real
 # (invisible, since nothing else is on screen) focused/foreground window.
+# --app mode (see below) opens a plain window rather than requesting
+# fullscreen, but fluxbox still decorates it with a title bar by default -
+# which offsets the page content down/right from (0,0), pushing the bottom
+# of the page past what ffmpeg captures. Force it undecorated and pinned to
+# exactly the capture rectangle, matched by WM_CLASS class (not instance,
+# which xdg sets to STREAM_URL's hostname and so isn't stable across hosts).
+mkdir -p /root/.fluxbox
+cat > /root/.fluxbox/apps <<EOF
+[app] (class=Chromium)
+  [Deco]        {NONE}
+  [Position]    (UPPERLEFT) {0 0}
+  [Dimensions]  {${WIDTH} ${HEIGHT}}
+[end]
+EOF
+
 echo "[stream] Starting window manager"
 fluxbox &
 sleep 2
@@ -42,10 +74,19 @@ pulseaudio -D --exit-idle-time=-1 --disallow-exit \
 sleep 2
 pactl set-default-sink ws4kp_audio
 
-echo "[stream] Launching Chromium (kiosk) -> ${STREAM_URL}"
+echo "[stream] Launching Chromium (app mode) -> ${STREAM_URL}"
+# --kiosk requests real EWMH fullscreen, which the window manager honors by
+# resizing the window to the full X11 screen - overriding --window-size and
+# ignoring the requested capture resolution entirely. Since the virtual
+# screen is deliberately padded larger than $RESOLUTION (see PAD above), that
+# silently pushed the bottom/right of the actual page content into the
+# padding margin, past the edge of what ffmpeg captures - cutting off the
+# bottom of the display. --app opens a chromeless window instead of
+# requesting fullscreen, so it actually respects --window-position/-size.
 chromium \
-	--kiosk \
+	--app="$STREAM_URL" \
 	--no-sandbox \
+	--test-type \
 	--disable-gpu \
 	--disable-dev-shm-usage \
 	--disable-infobars \
@@ -58,8 +99,7 @@ chromium \
 	--disable-ipc-flooding-protection \
 	--window-position=0,0 \
 	--window-size="${WIDTH},${HEIGHT}" \
-	--user-data-dir=/tmp/chromium-profile \
-	"$STREAM_URL" &
+	--user-data-dir=/tmp/chromium-profile &
 
 sleep 10
 
